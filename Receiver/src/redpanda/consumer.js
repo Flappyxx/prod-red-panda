@@ -1,7 +1,13 @@
 import {Kafka} from "kafkajs"
-import {getLocalBroker} from "../config/config.js";
+import {createClient} from 'redis'
+import {getLocalBroker,getTopic,redisOptions} from "../config/config.js";
 
 const isLocalBroker = getLocalBroker()
+
+const client = await createClient(redisOptions)
+    .on('error', err => console.log('Redis Client Error', err))
+    .connect()
+
 
 const redpanda = new Kafka({
     brokers: [
@@ -11,14 +17,17 @@ const redpanda = new Kafka({
 
 const consumer = redpanda.consumer({ groupId: 'group' })
 
-const topic = process.env.TOPIC;
+const topic = getTopic();
 export const connexion = async () => {
     await consumer.connect()
     await consumer.subscribe({ topic, fromBeginning: false })
     await consumer.run({
         eachMessage: async ({ topic, partition, message }) => {
             let json = await JSON.parse(message.value)
-            console.log(`[${convertTS(message.timestamp)}] ${json.user} : ${json.message}`)
+            let words = json.message.split(" ")
+            words.forEach((word)=>{
+                client.incr(word)
+            })
         },
     })
 }
